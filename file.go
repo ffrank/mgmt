@@ -114,7 +114,7 @@ func (obj *FileRes) Watch(processChan chan Event) {
 	defer cuuid.Unregister()
 
 	//var recursive bool = false
-	//var isdir = (obj.GetPath()[len(obj.GetPath())-1:] == "/") // dirs have trailing slashes
+	var isDir = strings.HasSuffix(obj.GetPath(), "/")
 	//log.Printf("IsDirectory: %v", isdir)
 	var safename = path.Clean(obj.GetPath()) // no trailing slash
 
@@ -126,6 +126,7 @@ func (obj *FileRes) Watch(processChan chan Event) {
 
 	patharray := PathSplit(safename) // tokenize the path
 	var index = len(patharray)       // starting index
+	var maxIndex = index             // how deep we will descend into the filesystem
 	var current string               // current "watcher" location
 	var deltaDepth int               // depth delta between watcher and event
 	var send = false                 // send event?
@@ -141,7 +142,12 @@ func (obj *FileRes) Watch(processChan chan Event) {
 			log.Printf("File[%v]: Watching: %v", obj.GetName(), current) // attempting to watch...
 		}
 		// initialize in the loop so that we can reset on rm-ed handles
-		err = watcher.Add(current)
+		if isDir && index == maxIndex {
+			// add all subdirectories recursively if this is the managed directory
+			err = obj.AddSubdirsToWatcher(current, watcher)
+		} else {
+			err = watcher.Add(current)
+		}
 		if err != nil {
 			if DEBUG {
 				log.Printf("File[%v]: watcher.Add(%v): Error: %v", obj.GetName(), current, err)
@@ -204,7 +210,8 @@ func (obj *FileRes) Watch(processChan chan Event) {
 				}
 
 				// we must be a parent watcher, so descend in
-				if deltaDepth < 0 {
+				// unless we're at the max, which means that this is a directory with recursive watches
+				if deltaDepth < 0 && index < maxIndex {
 					watcher.Remove(current)
 					index++
 				}
@@ -225,8 +232,10 @@ func (obj *FileRes) Watch(processChan chan Event) {
 						send = true
 						dirty = true
 					}
-					watcher.Remove(current)
-					index++
+					if index < maxIndex { // this should always be true at this point
+						watcher.Remove(current)
+						index++
+					}
 				}
 
 				// if event.Name startswith safename, send event, we're already deeper
@@ -267,6 +276,28 @@ func (obj *FileRes) Watch(processChan chan Event) {
 			resp.ACKWait()                                 // wait for the ACK()
 		}
 	}
+}
+
+func (obj *FileRes) AddSubdirsToWatcher(base string, watcher *fsnotify.Watcher) error {
+	return filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			log.Printf("File[%v]: error adding %s to watch: %s", obj.GetName(), path, err)
+			return filepath.SkipDir
+		}
+		if info.IsDir() {
+			if info.Name() == "." || info.Name() == ".." {
+				return filepath.SkipDir
+			}
+			if DEBUG {
+				log.Printf("File[%v]: adding %s to watch", obj.GetName(), path)
+			}
+			err = watcher.Add(path)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (obj *FileRes) HashSHA256fromContent() string {
