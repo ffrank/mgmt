@@ -20,7 +20,6 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/cf-guardian/guardian/kernel/fileutils"
 	"gopkg.in/fsnotify.v1"
 	//"github.com/go-fsnotify/fsnotify" // git master of "gopkg.in/fsnotify.v1"
 	"encoding/gob"
@@ -391,6 +390,7 @@ func (obj *FileRes) DirApply() error {
 		return err // either nil or not, for success or failure
 	}
 
+	// TODO: should this case also clear out existing directory contents?
 	if obj.Content == "" {
 		if err := os.Mkdir(obj.GetPath(), 0777); err != nil {
 			return err
@@ -398,11 +398,164 @@ func (obj *FileRes) DirApply() error {
 		return nil
 	}
 
-	if err := fileutils.New().Copy(obj.GetPath(), obj.Content); err != nil {
+	fileAtDestination := make(map[string]bool)
+	source := obj.Content
+	destination := obj.GetPath()
+
+	// On the first pass, compare all managed files with the source directory.
+	// Remove spurious entries, sync links and files.
+	filepath.Walk(destination, func(destPath string, destInfo os.FileInfo, err error) error {
+		if err != nil {
+			log.Printf("File[%v]: error looking up content path %v: %v", obj.GetName(), destPath, err)
+			return filepath.SkipDir
+		}
+
+		relativePath, err := filepath.Rel(destination, destPath)
+		sourcePath := filepath.Join(source, relativePath)
+
+		sourceInfo, err := os.Lstat(sourcePath)
+		if os.IsNotExist(err) {
+			if err = os.RemoveAll(destPath); err != nil {
+				log.Printf("File[%v]: error removing %v: %v", obj.GetName, destPath, err)
+			}
+			return nil
+		}
+
+		if destInfo.Mode()&os.ModeType != sourceInfo.Mode()&os.ModeType {
+			if err = os.RemoveAll(destPath); err != nil {
+				log.Printf("File[%v]: error removing %v: %v", obj.GetName, destPath, err)
+			}
+			// Just keep walking; this entry will be rewritten during the 2nd pass.
+			return nil
+		}
+
+		// Directories need no immediate processing; contents will be walked next.
+		if destInfo.IsDir() {
+			return nil
+		}
+
+		// Mark this entry as already checked, so that the 2nd pass can ignore it.
+		fileAtDestination[relativePath] = true
+
+		// Filter sockets, pipes etc., i.e. everything that is no file or symlink.
+		if (destInfo.Mode()&os.ModeType)&^os.ModeSymlink != 0 {
+			log.Printf("File[%v]: not processing unsupported filesystem entry %v", obj.GetName, destPath)
+			return nil
+		}
+
+		if destInfo.Mode()&os.ModeSymlink != 0 {
+			err = copySymlink(sourcePath, destPath)
+			if err != nil {
+				log.Printf("File[%v]: could not sync link %v from %v: %v", obj.GetName, destPath, sourcePath, err)
+				return nil
+			}
+		}
+
+		sourceHash, err := fileHashSHA256(sourcePath)
+		if err != nil {
+			log.Printf("File[%v]: error reading source file %v: %v", obj.GetName, sourcePath, err)
+			return nil
+		}
+		destHash, err := fileHashSHA256(destPath)
+		if err != nil {
+			log.Printf("File[%v]: error reading managed file %v: %v", obj.GetName, destPath, err)
+			return nil
+		}
+
+		if sourceHash == destHash {
+			return nil
+		}
+
+		err = copyFile(sourcePath, destPath)
+		if err != nil {
+			log.Printf("File[%v]: error copying %v to %v: %v", obj.GetName, sourcePath, destPath, err)
+			return nil
+		}
+
+		return nil
+	})
+
+	// On the second pass, visit all files in the source directory.
+	// Any file not seen in the managed directory tree needs copying.
+	filepath.Walk(source, func(sourcePath string, sourceInfo os.FileInfo, err error) error {
+		relativePath, err := filepath.Rel(source, sourcePath)
+
+		if fileAtDestination[relativePath] {
+			return nil
+		}
+
+		destPath := filepath.Join(destination, relativePath)
+
+		if sourceInfo.IsDir() {
+			if err = os.Mkdir(destPath, sourceInfo.Mode()); err != nil {
+				log.Printf("File[%v]: error creating subdirectory %v: %v", obj.GetName, destPath, err)
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if sourceInfo.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(sourcePath)
+			if err != nil {
+				log.Printf("File[%v]: could not read link %v: %v", obj.GetName, sourcePath, err)
+				return nil
+			}
+			err = os.Symlink(target, destPath)
+			if err != nil {
+				log.Printf("File[%v]: could not create link %v: %v", obj.GetName, destPath, err)
+			}
+			return nil
+		}
+
+		err = copyFile(sourcePath, destPath)
+		if err != nil {
+			log.Printf("File[%v]: error copying %v to %v: %v", obj.GetName, sourcePath, destPath, err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+func copySymlink(sourcePath, destPath string) error {
+	content, err := os.Readlink(sourcePath)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	current, err := os.Readlink(destPath)
+	if err != nil {
+		return err
+	}
+
+	if content == current {
+		return nil
+	}
+
+	if err = os.Remove(destPath); err != nil {
+		return err
+	}
+
+	return os.Symlink(content, destPath)
+}
+
+func copyFile(sourcePath, destPath string) error {
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+
+	return err
 }
 
 func collectPaths(srcpath string) ([]string, error) {
