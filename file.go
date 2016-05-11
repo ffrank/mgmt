@@ -278,7 +278,7 @@ func (obj *FileRes) Watch(processChan chan Event) {
 }
 
 func (obj *FileRes) AddSubdirsToWatcher(base string, watcher *fsnotify.Watcher) error {
-	return filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			log.Printf("File[%v]: error adding %s to watch: %s", obj.GetName(), path, err)
 			return filepath.SkipDir
@@ -297,6 +297,10 @@ func (obj *FileRes) AddSubdirsToWatcher(base string, watcher *fsnotify.Watcher) 
 		}
 		return nil
 	})
+	if err == filepath.SkipDir {
+		return nil
+	}
+	return err
 }
 
 func (obj *FileRes) HashSHA256fromContent() string {
