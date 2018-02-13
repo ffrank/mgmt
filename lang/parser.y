@@ -80,7 +80,7 @@ func init() {
 %token ROCKET ARROW DOT
 %token STR_IDENTIFIER BOOL_IDENTIFIER INT_IDENTIFIER FLOAT_IDENTIFIER
 %token STRUCT_IDENTIFIER VARIANT_IDENTIFIER VAR_IDENTIFIER IDENTIFIER
-%token VAR_IDENTIFIER_HX
+%token VAR_IDENTIFIER_HX CAPITALIZED_IDENTIFIER
 %token COMMENT ERROR
 
 // precedence table
@@ -756,7 +756,7 @@ edge_half_list:
 ;
 edge_half:
 	// eg: test["n1"]
-	IDENTIFIER OPEN_BRACK expr CLOSE_BRACK
+	CAPITALIZED_IDENTIFIER OPEN_BRACK expr CLOSE_BRACK
 	{
 		posLast(yylex, yyDollar) // our pos
 		$$.edgeHalf = &StmtEdgeHalf{

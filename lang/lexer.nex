@@ -305,6 +305,12 @@
 			lval.str = s[1:len(s)] // remove the leading $
 			return VAR_IDENTIFIER
 		}
+/[A-Z][a-z0-9]*/
+		{
+			yylex.pos(lval) // our pos
+			lval.str = yylex.Text()
+			return CAPITALIZED_IDENTIFIER
+		}
 /[a-z][a-z0-9]*/
 		{
 			yylex.pos(lval) // our pos
