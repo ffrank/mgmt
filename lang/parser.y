@@ -743,7 +743,7 @@ edge:
 //;
 ;
 edge_half_list:
-	/* end of list */
+	edge_half
 	{
 		posLast(yylex, yyDollar) // our pos
 		$$.edgeHalfList = []*StmtEdgeHalf{}
