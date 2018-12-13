@@ -18,6 +18,8 @@
 // Package gapi defines the interface that graph API generators must meet.
 package gapi
 
+//go:generate mockgen -source=$GOFILE -destination=../mocks/gapi_gapi.go -package=mocks_gapi
+
 import (
 	"encoding/gob"
 	"fmt"

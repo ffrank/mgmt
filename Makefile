@@ -121,7 +121,7 @@ bindata: ## generate go files from non-go sources
 	$(MAKE) --quiet -C bindata
 
 generate:
-	go generate
+	go generate ./...
 
 lang: ## generates the lexer/parser for the language frontend
 	@# recursively run make in child dir named lang
