@@ -189,7 +189,7 @@ type TextArea struct {
 }
 
 // Locate is used by the parser to store the token positions in AST nodes
-func (a *TextArea) Locate(line int, col int, endline int, endcol int) {
+func (a TextArea) Locate(line int, col int, endline int, endcol int) {
 	a.startLine = line
 	a.startColumn = col
 	a.endLine = endline
@@ -197,19 +197,18 @@ func (a *TextArea) Locate(line int, col int, endline int, endcol int) {
 }
 
 // LocalNode is the interface implemented by AST nodes that store their code
-// position
+// position. It is implemented by node types that embed TextArea.
 type LocalNode interface {
-	// Locate calls Locate on the embedded TextArea
 	Locate(int, int, int, int)
 }
 
 // GetPosition returns the starting line/column of an AST node
-func (a *TextArea) GetPosition() (int, int) {
+func (a TextArea) GetPosition() (int, int) {
 	return a.startLine, a.startColumn
 }
 
 // GetEndPosition returns the end line/column of an AST node
-func (a *TextArea) GetEndPosition() (int, int) {
+func (a TextArea) GetEndPosition() (int, int) {
 	return a.endLine, a.endColumn
 }
 
@@ -358,11 +357,6 @@ func (obj *StmtBind) Graph() (*pgraph.Graph, error) {
 // from the use of the var which this binds the expression to.
 func (obj *StmtBind) Output(map[interfaces.Func]types.Value) (*interfaces.Output, error) {
 	return interfaces.EmptyOutput(), nil
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *StmtBind) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // StmtRes is a representation of a resource and possibly some edges. The `Name`
@@ -1206,11 +1200,6 @@ func (obj *StmtRes) metaparams(table map[interfaces.Func]types.Value, res engine
 	}
 
 	return nil
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *StmtRes) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // StmtResContents is the interface that is met by the resource contents. Look
@@ -2428,11 +2417,6 @@ func (obj *StmtEdge) Output(table map[interfaces.Func]types.Value) (*interfaces.
 	}, nil
 }
 
-// Locate stores the location from parsing in the AST node
-func (obj *StmtEdge) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
-}
-
 // StmtEdgeHalf represents half of an edge in the parsed edge representation.
 // This does not satisfy the Stmt interface.
 type StmtEdgeHalf struct {
@@ -2960,11 +2944,6 @@ func (obj *StmtIf) Output(table map[interfaces.Func]types.Value) (*interfaces.Ou
 		Resources: resources,
 		Edges:     edges,
 	}, nil
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *StmtIf) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // StmtProg represents a list of stmt's. This usually occurs at the top-level of
@@ -4352,11 +4331,6 @@ func (obj *StmtProg) IsModuleUnsafe() error { // TODO: rename this function?
 	return nil
 }
 
-// Locate stores the location from parsing in the AST node
-func (obj *StmtProg) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
-}
-
 // StmtFunc represents a user defined function. It binds the specified name to
 // the supplied function in the current scope and irrespective of the order of
 // definition.
@@ -4527,11 +4501,6 @@ func (obj *StmtFunc) Graph() (*pgraph.Graph, error) {
 // from the use of the func which this binds the function to.
 func (obj *StmtFunc) Output(map[interfaces.Func]types.Value) (*interfaces.Output, error) {
 	return interfaces.EmptyOutput(), nil
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *StmtFunc) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // StmtClass represents a user defined class. It's effectively a program body
@@ -4728,11 +4697,6 @@ func (obj *StmtClass) Graph() (*pgraph.Graph, error) {
 // it can be called from the StmtInclude Output method.
 func (obj *StmtClass) Output(table map[interfaces.Func]types.Value) (*interfaces.Output, error) {
 	return obj.Body.Output(table)
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *StmtClass) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // StmtInclude causes a user defined class to get used. It's effectively the way
@@ -5102,11 +5066,6 @@ func (obj *StmtInclude) Output(table map[interfaces.Func]types.Value) (*interfac
 	return obj.class.Output(table)
 }
 
-// Locate stores the location from parsing in the AST node
-func (obj *StmtInclude) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
-}
-
 // StmtImport adds the exported scope definitions of a module into the current
 // scope. It can be used anywhere a statement is allowed, and can even be nested
 // inside a class definition. By convention, it is commonly used at the top of a
@@ -5207,11 +5166,6 @@ func (obj *StmtImport) Graph() (*pgraph.Graph, error) {
 // the scope so that others can use that to produce values and output.
 func (obj *StmtImport) Output(map[interfaces.Func]types.Value) (*interfaces.Output, error) {
 	return interfaces.EmptyOutput(), nil
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *StmtImport) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // StmtComment is a representation of a comment. It is currently unused. It
@@ -6248,11 +6202,6 @@ func (obj *ExprList) Value() (types.Value, error) {
 	}, nil
 }
 
-// Locate stores the location from parsing in the AST node
-func (obj *ExprList) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
-}
-
 // ExprMap is a representation of a (dictionary) map.
 type ExprMap struct {
 	scope *interfaces.Scope // store for referencing this later
@@ -6763,11 +6712,6 @@ func (obj *ExprMap) Value() (types.Value, error) {
 	}, nil
 }
 
-// Locate stores the location from parsing in the AST node
-func (obj *ExprMap) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
-}
-
 // ExprMapKV represents a key and value pair in a (dictionary) map. This does
 // not satisfy the Expr interface.
 type ExprMapKV struct {
@@ -7137,11 +7081,6 @@ func (obj *ExprStruct) Value() (types.Value, error) {
 		T: obj.typ,
 		V: fields,
 	}, nil
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *ExprStruct) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // ExprStructField represents a name value pair in a struct field. This does not
@@ -7930,11 +7869,6 @@ func (obj *ExprFunc) Value() (types.Value, error) {
 	//	V: obj.V,
 	//	T: obj.typ,
 	//}, nil
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *ExprFunc) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // ExprCall is a representation of a function call. This does not represent the
@@ -8835,11 +8769,6 @@ func (obj *ExprCall) Value() (types.Value, error) {
 	return obj.V, nil
 }
 
-// Locate stores the location from parsing in the AST node
-func (obj *ExprCall) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
-}
-
 // ExprVar is a representation of a variable lookup. It returns the expression
 // that that variable refers to.
 type ExprVar struct {
@@ -9094,11 +9023,6 @@ func (obj *ExprVar) Value() (types.Value, error) {
 		return nil, fmt.Errorf("var `%s` does not exist in scope", obj.Name)
 	}
 	return expr.Value() // recurse
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *ExprParam) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // ExprParam represents a parameter to a function.
@@ -10139,11 +10063,6 @@ func (obj *ExprIf) Value() (types.Value, error) {
 		return obj.ThenBranch.Value()
 	}
 	return obj.ElseBranch.Value()
-}
-
-// Locate stores the location from parsing in the AST node
-func (obj *ExprIf) Locate(l int, c int, el int, ec int) {
-	obj.TextArea.Locate(l, c, el, ec)
 }
 
 // getScope pulls the local stored scope out of an Expr, without needing to add
